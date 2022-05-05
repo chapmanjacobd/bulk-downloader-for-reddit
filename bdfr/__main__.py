@@ -17,12 +17,15 @@ _common_options = [
     click.option("--authenticate", is_flag=True, default=None),
     click.option("--config", type=str, default=None),
     click.option("--disable-module", multiple=True, default=None, type=str),
+    click.option("--file-scheme", default=None, type=str),
+    click.option("--folder-scheme", default=None, type=str),
     click.option("--ignore-user", type=str, multiple=True, default=None),
     click.option("--include-id-file", multiple=True, default=None),
     click.option("--log", type=str, default=None),
     click.option("--saved", is_flag=True, default=None),
     click.option("--search", default=None, type=str),
     click.option("--submitted", is_flag=True, default=None),
+    click.option("--subscribed", is_flag=True, default=None),
     click.option("--time-format", type=str, default=None),
     click.option("--upvoted", is_flag=True, default=None),
     click.option("-L", "--limit", default=None, type=int),
@@ -38,8 +41,6 @@ _common_options = [
 ]
 
 _downloader_options = [
-    click.option("--file-scheme", default=None, type=str),
-    click.option("--folder-scheme", default=None, type=str),
     click.option("--make-hard-links", is_flag=True, default=None),
     click.option("--max-wait-time", type=int, default=None),
     click.option("--no-dupes", is_flag=True, default=None),
@@ -85,24 +86,6 @@ def cli_download(context: click.Context, **_):
         reddit_downloader.download()
     except Exception:
         logger.exception("Downloader exited unexpectedly")
-        raise
-    else:
-        logger.info("Program complete")
-
-
-@cli.command("print")
-@_add_options(_common_options)
-@_add_options(_downloader_options)
-@click.pass_context
-def cli_print(context: click.Context, **_):
-    config = Configuration()
-    config.process_click_arguments(context)
-    setup_logging(config.verbose)
-    try:
-        reddit_downloader = RedditDownloader(config)
-        reddit_downloader.download()
-    except Exception:
-        logger.exception("Printer exited unexpectedly")
         raise
     else:
         logger.info("Program complete")
