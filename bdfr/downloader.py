@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 # coding=utf-8
 
+import argparse
 import hashlib
+import logging
 import logging.handlers
 import os
+import sys
 import time
 from datetime import datetime
 from multiprocessing import Pool
@@ -19,6 +22,56 @@ from bdfr.connector import RedditConnector
 from bdfr.site_downloaders.download_factory import DownloadFactory
 
 logger = logging.getLogger(__name__)
+
+from functools import wraps
+
+from IPython.core import ultratb
+from IPython.terminal.debugger import TerminalPdb
+
+
+def run_once(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if not f.has_run:
+            result = f(*args, **kwargs)
+            f.has_run = True
+            return result
+
+    f.has_run = False
+    return wrapper
+
+
+@run_once
+def argparse_log():
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("-v", "--verbose", action="count", default=0)
+    args, _unknown = parser.parse_known_args()
+    print(args)
+
+    try:
+        if args.verbose > 0 and os.getpgrp() == os.tcgetpgrp(sys.stdout.fileno()):
+            sys.excepthook = ultratb.FormattedTB(
+                mode="Verbose" if args.verbose > 1 else "Context",
+                color_scheme="Neutral",
+                call_pdb=1,
+                debugger_cls=TerminalPdb,
+            )
+        else:
+            pass
+    except:
+        pass
+
+    log_levels = [logging.WARNING, logging.INFO, logging.DEBUG]
+    logging.root.handlers = []  # clear any existing handlers
+    logging.basicConfig(
+        level=log_levels[min(len(log_levels) - 1, args.verbose)],
+        format="%(message)s",
+        datefmt="[%X]",
+    )
+    return logging.getLogger()
+
+
+log = argparse_log()
 
 
 def _calc_hash(existing_file: Path):
@@ -55,29 +108,25 @@ class RedditDownloader(RedditConnector):
             submission.author is None and "DELETED" in self.args.ignore_user
         ):
             logger.debug(
-                f'Submission {submission.id} in {submission.subreddit.display_name} skipped'
-                f' due to {submission.author.name if submission.author else "DELETED"} being an ignored user')
+                f"Submission {submission.id} in {submission.subreddit.display_name} skipped"
+                f' due to {submission.author.name if submission.author else "DELETED"} being an ignored user'
+            )
             return
-        elif submission.score < self.args.min_score or self.args.max_score < submission.score:
-            logger.debug(f"Submission {submission.id} filtered due to score {submission.score} < {self.args.min_score}")
+        elif self.args.min_score and submission.score < self.args.min_score:
+            logger.debug(
+                f"Submission {submission.id} filtered due to score {submission.score} < [{self.args.min_score}]"
+            )
             return
-        elif submission.upvote_ratio < self.args.min_score_ratio or self.args.max_score_ratio < submission.upvote_ratio:
+        elif self.args.max_score and self.args.max_score < submission.score:
+            logger.debug(
+                f"Submission {submission.id} filtered due to score [{self.args.max_score}] < {submission.score}"
+            )
+            return
+        elif (self.args.min_score_ratio and submission.upvote_ratio < self.args.min_score_ratio) or (
+            self.args.max_score_ratio and self.args.max_score_ratio < submission.upvote_ratio
+        ):
             logger.debug(f"Submission {submission.id} filtered due to score ratio ({submission.upvote_ratio})")
             return
-        elif not isinstance(submission, praw.models.Submission):
-            logger.warning(f'{submission.id} is not a submission')
-            return
-        elif not self.download_filter.check_url(submission.url):
-            logger.debug(f'Submission {submission.id} filtered due to URL {submission.url}')
-            return
-
-        elif submission.score < self.args.min_score or self.args.max_score < submission.score:
-            logger.debug(f"Submission {submission.id} filtered due to score {submission.score} < {self.args.min_score}")
-            return
-        elif submission.upvote_ratio < self.args.min_score_ratio or self.args.max_score_ratio < submission.upvote_ratio:
-            logger.debug(f"Submission {submission.id} filtered due to score ratio ({submission.upvote_ratio})")
-            return
-
         elif not isinstance(submission, praw.models.Submission):
             logger.warning(f"{submission.id} is not a submission")
             return
